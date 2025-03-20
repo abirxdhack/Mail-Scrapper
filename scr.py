@@ -3,7 +3,7 @@ import os
 import aiofiles
 import asyncio
 from urllib.parse import urlparse
-from pyrogram import Client, filters, enums
+from pyrogram import Client, filters, ParseMode
 from pyrogram.errors import UserAlreadyParticipant, InviteHashExpired, InviteHashInvalid, PeerIdInvalid, InviteRequestSent
 from config import SESSION_STRING, API_ID, API_HASH, BOT_TOKEN
 import logging
@@ -39,11 +39,25 @@ def filter_messages(message):
 
 async def collect_channel_data(channel_identifier, amount):
     messages = []
+    batch_size = 100  # Fetch messages in batches of 100
+    offset_id = 0
 
-    async for message in user.search_messages(channel_identifier):
-        matches = filter_messages(message.text)
-        if matches:
-            messages.extend(matches)
+    while len(messages) < amount:
+        message_batch = []
+        async for message in user.search_messages(channel_identifier, offset_id=offset_id, limit=batch_size):
+            message_batch.append(message)
+            offset_id = message.message_id
+
+        if not message_batch:
+            break
+
+        # Process the batch concurrently
+        tasks = [asyncio.create_task(process_message(message)) for message in message_batch]
+        results = await asyncio.gather(*tasks)
+
+        for matches in results:
+            if matches:
+                messages.extend(matches)
 
         if len(messages) >= amount:
             break
@@ -55,6 +69,10 @@ async def collect_channel_data(channel_identifier, amount):
         return [], 0, "<b>❌ No Email and Password Combinations were found</b>"
 
     return unique_messages[:amount], duplicates_removed, None
+
+async def process_message(message):
+    matches = filter_messages(message.text)
+    return matches
 
 async def join_private_chat(client, invite_link):
     try:
@@ -94,7 +112,7 @@ def get_user_info(message):
 async def collect_handler(client, message):
     args = message.text.split()
     if len(args) < 3:
-        await client.send_message(message.chat.id, "<b>❌ Please provide a channel with amount</b>", parse_mode=enums.ParseMode.HTML)
+        await client.send_message(message.chat.id, "<b>❌ Please provide a channel with amount</b>", parse_mode=ParseMode.HTML)
         return
 
     # Extract channel identifier (username, invite link, or chat ID)
@@ -104,7 +122,7 @@ async def collect_handler(client, message):
     channel_name = ""
     channel_username = ""
 
-    progress_message = await client.send_message(message.chat.id, "<b>Checking Username...</b>", parse_mode=enums.ParseMode.HTML)
+    progress_message = await client.send_message(message.chat.id, "<b>Checking Username...</b>", parse_mode=ParseMode.HTML)
 
     # Handle private channel chat ID (numeric)
     if channel_identifier.lstrip("-").isdigit():
@@ -116,7 +134,7 @@ async def collect_handler(client, message):
             channel_name = chat.title
             logger.info(f"Scraping from private channel: {channel_name} (ID: {chat_id})")
         except Exception as e:
-            await progress_message.edit_text("<b>Hey Bro Incorrect ChatId ❌</b>", parse_mode=enums.ParseMode.HTML)
+            await progress_message.edit_text("<b>Hey Bro Incorrect ChatId ❌</b>", parse_mode=ParseMode.HTML)
             logger.error(f"Failed to fetch private channel: {e}")
             return
     else:
@@ -128,10 +146,10 @@ async def collect_handler(client, message):
                 if not joined:
                     request_sent = await send_join_request(user, invite_link)
                     if request_sent:
-                        await progress_message.edit_text("<b>Hey Bro I Have Sent Join Request✅</b>", parse_mode=enums.ParseMode.HTML)
+                        await progress_message.edit_text("<b>Hey Bro I Have Sent Join Request✅</b>", parse_mode=ParseMode.HTML)
                         return
                     else:
-                        await progress_message.edit_text("<b>Hey Bro Incorrect Invite Link ❌</b>", parse_mode=enums.ParseMode.HTML)
+                        await progress_message.edit_text("<b>Hey Bro Incorrect Invite Link ❌</b>", parse_mode=ParseMode.HTML)
                         return
                 else:
                     chat = await user.get_chat(invite_link)
@@ -145,19 +163,19 @@ async def collect_handler(client, message):
             chat = await user.get_chat(channel_identifier)
             channel_name = chat.title
         except Exception:
-            await progress_message.edit_text(f"<b>Hey Bro Incorrect Username ❌</b>", parse_mode=enums.ParseMode.HTML)
+            await progress_message.edit_text(f"<b>Hey Bro Incorrect Username ❌</b>", parse_mode=ParseMode.HTML)
             return
 
-    await progress_message.edit_text("<b>Scrapping In Progress</b>", parse_mode=enums.ParseMode.HTML)
+    await progress_message.edit_text("<b>Scrapping In Progress</b>", parse_mode=ParseMode.HTML)
 
     messages, duplicates_removed, error_msg = await collect_channel_data(channel_identifier, amount)
 
     if error_msg:
-        await progress_message.edit_text(error_msg, parse_mode=enums.ParseMode.HTML)
+        await progress_message.edit_text(error_msg, parse_mode=ParseMode.HTML)
         return
 
     if not messages:
-        await progress_message.edit_text("<b>🥲 No email and password combinations were found.</b>", parse_mode=enums.ParseMode.HTML)
+        await progress_message.edit_text("<b>🥲 No email and password combinations were found.</b>", parse_mode=ParseMode.HTML)
         return
 
     async with aiofiles.open(f'{channel_identifier}_combos.txt', 'w', encoding='utf-8') as file:
@@ -176,7 +194,7 @@ async def collect_handler(client, message):
                           f"<b>━━━━━━━━━━━━━━━━</b>\n"
                           f"<b>SCRAPED BY <a href='https://t.me/ItsSmartToolBot'>Smart Tool ⚙️</a></b>")
         user_info = get_user_info(message)
-        await client.send_document(message.chat.id, file, caption=output_message + f"\n\nRequested by: {user_info}", parse_mode=enums.ParseMode.HTML)
+        await client.send_document(message.chat.id, file, caption=output_message + f"\n\nRequested by: {user_info}", parse_mode=ParseMode.HTML)
 
     os.remove(f'{channel_identifier}_combos.txt')
 

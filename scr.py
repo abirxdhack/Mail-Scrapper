@@ -94,7 +94,7 @@ def get_user_info(message):
 async def collect_handler(client, message):
     args = message.text.split()
     if len(args) < 3:
-        await message.reply_text("<b>❌ Please provide a channel with amount</b>", parse_mode=enums.ParseMode.HTML)
+        await client.send_message(message.chat.id, "<b>❌ Please provide a channel with amount</b>", parse_mode=enums.ParseMode.HTML)
         return
 
     # Extract channel identifier (username, invite link, or chat ID)
@@ -104,7 +104,7 @@ async def collect_handler(client, message):
     channel_name = ""
     channel_username = ""
 
-    progress_message = await message.reply_text("<b>Checking Username...</b>", parse_mode=enums.ParseMode.HTML)
+    progress_message = await client.send_message(message.chat.id, "<b>Checking Username...</b>", parse_mode=enums.ParseMode.HTML)
 
     # Handle private channel chat ID (numeric)
     if channel_identifier.lstrip("-").isdigit():
@@ -153,16 +153,12 @@ async def collect_handler(client, message):
     messages, duplicates_removed, error_msg = await collect_channel_data(channel_identifier, amount)
 
     if error_msg:
-        await progress_message.delete()
-        await message.reply_text(error_msg, parse_mode=enums.ParseMode.HTML)
+        await progress_message.edit_text(error_msg, parse_mode=enums.ParseMode.HTML)
         return
 
     if not messages:
-        await progress_message.delete()
-        await message.reply_text("<b>🥲 No email and password combinations were found.</b>", parse_mode=enums.ParseMode.HTML)
+        await progress_message.edit_text("<b>🥲 No email and password combinations were found.</b>", parse_mode=enums.ParseMode.HTML)
         return
-
-    await progress_message.delete()
 
     async with aiofiles.open(f'{channel_identifier}_combos.txt', 'w', encoding='utf-8') as file:
         for combo in messages:
@@ -180,7 +176,7 @@ async def collect_handler(client, message):
                           f"<b>━━━━━━━━━━━━━━━━</b>\n"
                           f"<b>SCRAPED BY <a href='https://t.me/ItsSmartToolBot'>Smart Tool ⚙️</a></b>")
         user_info = get_user_info(message)
-        await message.reply_document(file, caption=output_message + f"\n\nRequested by: {user_info}", parse_mode=enums.ParseMode.HTML)
+        await client.send_document(message.chat.id, file, caption=output_message + f"\n\nRequested by: {user_info}", parse_mode=enums.ParseMode.HTML)
 
     os.remove(f'{channel_identifier}_combos.txt')
 

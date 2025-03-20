@@ -15,27 +15,31 @@
 
 ## Features
 
-- Scrapes email and password combinations from private/public Telegram groups and channels.
-- Supports format: group/channel username, ID, or link.
-- Handles multiple requests at a time.
-- Super-fast scraping speed.
+-New Feature: Scrape from multiple chats using a single command.
+-Join Request Automatically Send Join Request To Chats Which Requires.
+-New Libraries Added For Speed Up.
+-Fixed UserAlreadyParticipant Error In Joinning And Scrapping From Private Chats.
+-Logging Added So That You Can See Every Functions Work In Console.
+-Updated All Regex Pattern.
+-user_link Variable Added For Nice Interface In Caption CC Scrapped By
+-Scrape Through Chat ID Of Chat Added Example /scr -1003463745639 10
 
 ## Requirements
 
 Before you begin, ensure you have met the following requirements:
 
 - Python 3.8 or higher.
-- `pyrofork` and `tgcrypto` libraries.
+- `pyrogram` and `tgcrypto` libraries.
 - A Telegram bot token (you can get one from [@BotFather](https://t.me/BotFather) on Telegram).
 - API ID and Hash: You can get these by creating an application on [my.telegram.org](https://my.telegram.org).
-- To Get `SESSION_STRING` Open [@SmartUtilBot](https://t.me/SmartUtilBot). Bot and use /pyro command and then follow all instructions.
+- To Get `SESSION_STRING` Open [@SmartUtilBot](https://t.me/ItsSmartToolBot). Bot and use /pyro command and then follow all instructions.
 
 ## Installation
 
-To install `pyrofork` and `tgcrypto`, run the following command:
+To install `pyrogram` , `asyncio` , `aiofiles` and `tgcrypto`, run the following command:
 
 ```bash
-pip install pyrofork tgcrypto
+pip install -r requirements.txt
 ```
 
 **Note: If you previously installed `pyrogram`, uninstall it before installing `pyrofork`.**
@@ -61,22 +65,34 @@ git clone https://github.com/abirxdhack/Mail-Scrapper
 cd Mail-Scrapper
 python scr.py
 ```
+## Deploy the Bot With Screen
+
+```sh
+git clone https://github.com/abirxdhack/Mail-Scrapper
+cd Mail-Scrapper
+screen -S MailScrapperBot
+python scr.py
+```
 
 ## Usage
 
-1. Use the `/scrmail` or `/mailscr` command followed by the group or channel username and the number of messages to scrape.
+The code currently supports the following commands:
 
-    ```text
-    /scrmail @channel_username 1000
-    ```
+1. `/scrmail <username> <amount>` - Scrapes email and password combinations from the specified username/channel.
+2. `/scrmail @<username> <amount>` - Scrapes email and password combinations from the specified username/channel.
+3. `/scrmail t.me/<username> <amount>` - Scrapes email and password combinations from the specified username/channel.
+4. `/scrmail https://t.me/<username> <amount>` - Scrapes email and password combinations from the specified username/channel.
+5. `/scrmail https://t.me/+<invite_link> <amount>` - Scrapes email and password combinations from the specified private channel invite link.
+6. `/scrmail <chat_id> <amount>` - Scrapes email and password combinations from the specified chat ID.
 
-2. The bot will scrape the specified number of messages for email and password combinations and provide the results.
+The command `/mailscr` can be used interchangeably with `/scrmail` for all the above variations.
 
 ✨ **Notes**:
 - Ensure the bot is an administrator in the channels/groups you want to scrape from for the best results.
 - The bot can handle a high number of requests simultaneously, but it's a good practice to monitor its performance and adjust limits if necessary.
 - If you encounter any issues, check the bot logs for detailed error messages.
 - Keep your API credentials and session string secure to prevent unauthorized access to your bot.
+- First Clone Repo Then Update Credentials Dont Direct Commit On Github To  Keep Credentials Secure.
 
 ## Author
 

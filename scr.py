@@ -50,25 +50,10 @@ def filter_messages(message):
 
 async def collect_channel_data(channel_identifier, amount):
     messages = []
-    batch_size = 100  # Fetch messages in batches of 100
-    offset_id = 0
-
-    while len(messages) < amount:
-        message_batch = []
-        async for message in user.search_messages(channel_identifier, offset_id=offset_id, limit=batch_size):
-            message_batch.append(message)
-            offset_id = message.message_id
-
-        if not message_batch:
-            break
-
-        # Process the batch concurrently
-        tasks = [asyncio.create_task(process_message(message)) for message in message_batch]
-        results = await asyncio.gather(*tasks)
-
-        for matches in results:
-            if matches:
-                messages.extend(matches)
+    async for message in user.search_messages(channel_identifier, limit=amount):
+        matches = filter_messages(message.text)
+        if matches:
+            messages.extend(matches)
 
         if len(messages) >= amount:
             break
@@ -80,10 +65,6 @@ async def collect_channel_data(channel_identifier, amount):
         return [], 0, "<b>❌ No Email and Password Combinations were found</b>"
 
     return unique_messages[:amount], duplicates_removed, None
-
-async def process_message(message):
-    matches = filter_messages(message.text)
-    return matches
 
 async def join_private_chat(client, invite_link):
     try:
@@ -100,13 +81,19 @@ async def join_private_chat(client, invite_link):
         logger.error(f"Failed to join chat {invite_link}: {e}")
         return False
 
-async def send_join_request(client, invite_link):
+async def send_join_request(client, invite_link, message):
     try:
-        await client.send_chat_join_request(invite_link)
+        await client.join_chat(invite_link)
         logger.info(f"Sent join request to chat: {invite_link}")
+        await message.edit_text("<b>Hey Bro I Have Sent Join Request✅</b>", parse_mode=ParseMode.HTML)
         return True
     except PeerIdInvalid as e:
         logger.error(f"Failed to send join request to chat {invite_link}: {e}")
+        await message.edit_text("<b>Hey Bro Incorrect Invite Link ❌</b>", parse_mode=ParseMode.HTML)
+        return False
+    except InviteRequestSent:
+        logger.info(f"Join request sent to the chat: {invite_link}")
+        await message.edit_text("<b>Hey Bro I Have Sent Join Request✅</b>", parse_mode=ParseMode.HTML)
         return False
 
 def get_user_info(message):
@@ -119,84 +106,79 @@ def get_user_info(message):
         user_info = f"[{group_name}]({group_url})"
     return user_info
 
-@app.on_message(filters.command(["scrmail", "mailscr"], prefixes=["/", "."]) & (filters.group | filters.private))
-async def collect_handler(client, message):
-    args = message.text.split()
-    if len(args) < 3:
-        await client.send_message(message.chat.id, "<b>❌ Please provide a channel with amount</b>", parse_mode=ParseMode.HTML)
-        return
-
-    # Extract channel identifier (username, invite link, or chat ID)
-    channel_identifier = args[1]
-    amount = int(args[2])
-    chat = None
-    channel_name = ""
-    channel_username = ""
-
-    progress_message = await client.send_message(message.chat.id, "<b>Checking Username...</b>", parse_mode=ParseMode.HTML)
-
-    # Handle private channel chat ID (numeric)
-    if channel_identifier.lstrip("-").isdigit():
-        # Treat it as a chat ID
-        chat_id = int(channel_identifier)
-        try:
-            # Fetch the chat details
-            chat = await user.get_chat(chat_id)
-            channel_name = chat.title
-            logger.info(f"Scraping from private channel: {channel_name} (ID: {chat_id})")
-        except Exception as e:
-            await progress_message.edit_text("<b>Hey Bro Incorrect ChatId ❌</b>", parse_mode=ParseMode.HTML)
-            logger.error(f"Failed to fetch private channel: {e}")
+def setup_email_handler(app):
+    @app.on_message(filters.command(["scrmail", "mailscr"], prefixes=["/", "."]) & (filters.group | filters.private))
+    async def collect_handler(client, message):
+        args = message.text.split()
+        if len(args) < 3:
+            await client.send_message(message.chat.id, "<b>❌ Please provide a channel with amount</b>", parse_mode=ParseMode.HTML)
             return
-    else:
-        parsed_url = urlparse(channel_identifier)
-        if parsed_url.scheme and parsed_url.netloc:
-            if parsed_url.path.startswith('/+'):
+
+        # Extract channel identifier (username, invite link, or chat ID)
+        channel_identifier = args[1]
+        amount = int(args[2])
+        chat = None
+        channel_name = ""
+
+        progress_message = await client.send_message(message.chat.id, "<b>Checking Username...</b>", parse_mode=ParseMode.HTML)
+
+        # Handle private channel chat ID (numeric)
+        if channel_identifier.lstrip("-").isdigit():
+            # Treat it as a chat ID
+            chat_id = int(channel_identifier)
+            try:
+                # Fetch the chat details
+                chat = await user.get_chat(chat_id)
+                channel_name = chat.title
+                logger.info(f"Scraping from private channel: {channel_name} (ID: {chat_id})")
+            except Exception as e:
+                await progress_message.edit_text("<b>Hey Bro Incorrect ChatId ❌</b>", parse_mode=ParseMode.HTML)
+                logger.error(f"Failed to fetch private channel: {e}")
+                return
+        else:
+            if channel_identifier.startswith("https://t.me/+"):
                 invite_link = channel_identifier
                 joined = await join_private_chat(user, invite_link)
                 if not joined:
-                    request_sent = await send_join_request(user, invite_link)
-                    if request_sent:
-                        await progress_message.edit_text("<b>Hey Bro I Have Sent Join Request✅</b>", parse_mode=ParseMode.HTML)
-                        return
-                    else:
-                        await progress_message.edit_text("<b>Hey Bro Incorrect Invite Link ❌</b>", parse_mode=ParseMode.HTML)
+                    request_sent = await send_join_request(user, invite_link, progress_message)
+                    if not request_sent:
                         return
                 else:
                     chat = await user.get_chat(invite_link)
-                    channel_identifier = chat.id
+                    channel_name = chat.title
+                    logger.info(f"Joined private channel via link: {channel_name}")
+                    channel_identifier = chat.id  # Use chat ID for further operations
             else:
-                channel_identifier = parsed_url.path.lstrip('/')
-        else:
-            channel_identifier = channel_identifier
+                # Handle public channels
+                channel_username = channel_identifier
+                try:
+                    chat = await user.get_chat(channel_username)
+                    channel_name = chat.title
+                except Exception as e:
+                    await progress_message.edit_text(f"<b>Hey Bro Incorrect Username ❌</b>", parse_mode=ParseMode.HTML)
+                    logger.error(f"Failed to fetch channel: {e}")
+                    return
 
-        try:
-            chat = await user.get_chat(channel_identifier)
-            channel_name = chat.title
-        except Exception:
-            await progress_message.edit_text(f"<b>Hey Bro Incorrect Username ❌</b>", parse_mode=ParseMode.HTML)
+        await progress_message.edit_text("<b>Scraping In Progress</b>", parse_mode=ParseMode.HTML)
+
+        messages, duplicates_removed, error_msg = await collect_channel_data(channel_identifier, amount)
+
+        if error_msg:
+            await progress_message.edit_text(error_msg, parse_mode=ParseMode.HTML)
             return
 
-    await progress_message.edit_text("<b>Scrapping In Progress</b>", parse_mode=ParseMode.HTML)
+        if not messages:
+            await progress_message.edit_text("<b>Sorry Bro ❌ No Mail Pass Found</b>", parse_mode=ParseMode.HTML)
+            return
 
-    messages, duplicates_removed, error_msg = await collect_channel_data(channel_identifier, amount)
+        file_path = f'{channel_identifier}_combos.txt'
+        async with aiofiles.open(file_path, 'w', encoding='utf-8') as file:
+            for combo in messages:
+                try:
+                    await file.write(f"{combo}\n")
+                except UnicodeEncodeError:
+                    continue
 
-    if error_msg:
-        await progress_message.edit_text(error_msg, parse_mode=ParseMode.HTML)
-        return
-
-    if not messages:
-        await progress_message.edit_text("<b>🥲 No email and password combinations were found.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    async with aiofiles.open(f'{channel_identifier}_combos.txt', 'w', encoding='utf-8') as file:
-        for combo in messages:
-            try:
-                await file.write(f"{combo}\n")
-            except UnicodeEncodeError:
-                continue
-
-    async with aiofiles.open(f'{channel_identifier}_combos.txt', 'rb') as file:
         output_message = (f"<b>Mail Scraped Successful ✅</b>\n"
                           f"<b>━━━━━━━━━━━━━━━━</b>\n"
                           f"<b>Source:</b> <code>{channel_name} 🌐</code>\n"
@@ -204,11 +186,12 @@ async def collect_handler(client, message):
                           f"<b>Duplicates Removed:</b> <code>{duplicates_removed} 🗑️</code>\n"
                           f"<b>━━━━━━━━━━━━━━━━</b>\n"
                           f"<b>SCRAPED BY <a href='https://t.me/ItsSmartToolBot'>Smart Tool ⚙️</a></b>")
-        user_info = get_user_info(message)
-        await client.send_document(message.chat.id, file, caption=output_message + f"\n\nRequested by: {user_info}", parse_mode=ParseMode.HTML)
+        await client.send_document(message.chat.id, file_path, caption=output_message, parse_mode=ParseMode.HTML)
 
-    os.remove(f'{channel_identifier}_combos.txt')
+        os.remove(file_path)
+        await progress_message.delete()
 
 if __name__ == "__main__":
+    setup_email_handler(app)
     user.start()
     app.run()

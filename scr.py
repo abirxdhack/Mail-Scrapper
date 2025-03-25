@@ -4,7 +4,9 @@ import os
 import aiofiles
 import asyncio
 from urllib.parse import urlparse
-from pyrogram import Client, filters, ParseMode
+from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import (
     UserAlreadyParticipant,
     InviteHashExpired,
@@ -38,6 +40,25 @@ user = Client(
     session_string=SESSION_STRING,
     workers=1000
 )
+
+START_MESSAGE = """
+<b>Welcome to the Email Scraper Bot 🕵️‍♂️📧</b>
+
+I'm here to help you scrape email and password combinations from Telegram channels.
+Use the commands below to get started:
+
+/scrmail [channel_username] [limit] - Scrape from a single channel. 📺
+/mailscr [channel_username1] [channel_username2] ... [limit] - Scrape from multiple channels. 📡
+
+<strong>Examples:</strong>
+/scrmail @username 100
+/scrmail username 100
+/scrmail t.me/username 100
+/scrmail https://t.me/username 100
+/scrmail https://t.me/+ZBqGFP5evRpmY2Y1 100
+
+Happy scraping! 🚀
+"""
 
 def filter_messages(message):
     if message is None:
@@ -107,7 +128,7 @@ def get_user_info(message):
     return user_info
 
 def setup_email_handler(app):
-    @app.on_message(filters.command(["scrmail", "mailscr"], prefixes=["/", "."]) & (filters.group | filters.private))
+    @app.on_message(filters.command(["scrmail", "mailscr"], prefixes=["/", ".", ",", "!"]) & (filters.group | filters.private))
     async def collect_handler(client, message):
         args = message.text.split()
         if len(args) < 3:
@@ -190,6 +211,13 @@ def setup_email_handler(app):
 
         os.remove(file_path)
         await progress_message.delete()
+
+@app.on_message(filters.command("start", prefixes=["/", ".", ",", "!"]) & (filters.group | filters.private))
+async def start(client, message):
+    buttons = [
+        [InlineKeyboardButton("Update Channel", url="https://t.me/Modvip_rm"), InlineKeyboardButton("My Dev👨‍💻", user_id=7303810912)]
+    ]
+    await client.send_message(message.chat.id, START_MESSAGE, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=InlineKeyboardMarkup(buttons))
 
 if __name__ == "__main__":
     setup_email_handler(app)
